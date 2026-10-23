@@ -473,7 +473,7 @@
         }
 
         // Exportación a Excel Segura para Celulares
-        function exportarAExcel() {
+      function exportarAExcel() {
             try {
                 const registroDia = registroAsistencia[fechaActual] || {};
                 const datos = [
@@ -500,7 +500,7 @@
                     XLSX.utils.book_append_sheet(wb, ws, "Asistencia");
                     XLSX.writeFile(wb, `Asistencia_${fechaActual}.xlsx`);
                     mostrarToast("Excel generado con éxito");
-                } else {
+                } else {  
                     // Descarga alternativa tipo CSV
                     let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
                     datos.forEach(row => { csvContent += row.map(e => `"${e}"`).join(",") + "\n"; });
