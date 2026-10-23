@@ -2,1227 +2,571 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control de Asistencia de Estudiantes</title>
-    <!-- Tailwind CSS -->
+    <!-- Ajuste para pantalla completa y bordes seguros en celulares -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#4f46e5">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    
+    <title>Control de Asistencia Estudiantil</title>
+    
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- Canvas Confetti -->
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    <!-- Google Fonts Inter -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- SheetJS para exportar a Excel sin errores -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
     <style>
+        /* Adaptación para pantallas completas con notch o barra de estado */
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f1f5f9;
+            padding-top: env(safe-area-inset-top, 0px);
+            padding-bottom: env(safe-area-inset-bottom, 0px);
+            padding-left: env(safe-area-inset-left, 0px);
+            padding-right: env(safe-area-inset-right, 0px);
+            min-height: 100vh;
+            background-color: #f8fafc;
         }
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 5px;
-            height: 5px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: #f1f5f9;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 4px;
-        }
+
+        /* Estilos para impresión */
         @media print {
             .no-print { display: none !important; }
             .print-only { display: block !important; }
-            body { background-color: white !important; }
+            body { padding: 0; background: white; }
+            .card-shadow { box-shadow: none !important; border: 1px solid #e2e8f0; }
         }
     </style>
 </head>
-<body class="text-slate-800 min-h-screen flex flex-col justify-between">
+<body class="text-slate-800 font-sans antialiased">
 
-    <!-- Toast Notifications -->
-    <div id="toastContainer" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+    <!-- Notificación Toast -->
+    <div id="toast" class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 ease-out bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 no-print">
+        <i id="toastIcon" data-lucide="check-circle-2" class="w-5 h-5 text-emerald-400"></i>
+        <span id="toastMsg" class="text-sm font-medium">Operación realizada</span>
+    </div>
 
-    <!-- Sticky Header -->
-    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm no-print">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
-            
-            <!-- Logo & Title -->
-            <div class="flex items-center gap-2.5">
-                <div class="bg-indigo-600 text-white p-2 rounded-xl shadow-sm">
-                    <i data-lucide="graduation-cap" class="w-5 h-5"></i>
+    <div class="max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
+
+        <!-- ENCABEZADO Y BARRA PRINCIPAL -->
+        <header class="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="p-3 bg-indigo-600 text-white rounded-2xl shadow-md shadow-indigo-100">
+                    <i data-lucide="graduation-cap" class="w-7 h-7"></i>
                 </div>
                 <div>
-                    <h1 class="font-bold text-base text-slate-900 leading-tight">Control de Asistencia de Estudiantes</h1>
-                    <div class="flex items-center gap-2">
-                        <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
-                            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Auto-guardado activo
+                    <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Control de Asistencia</h1>
+                    <div class="flex items-center gap-2 mt-0.5">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span> Auto-guardado activo
                         </span>
-                        <span id="lastSaveTimestamp" class="text-[10px] text-slate-400 font-medium hidden sm:inline">• Sin cambios pendientes</span>
+                        <span id="lastSavedText" class="text-xs text-slate-400 font-medium">Último cambio: Hoy</span>
                     </div>
                 </div>
             </div>
 
-            <!-- Date Controls & Admin -->
-            <div class="flex items-center gap-2">
-                <!-- Manual Save Button -->
-                <button onclick="saveManualRegistration()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
-                    <i data-lucide="save" class="w-3.5 h-3.5"></i>
-                    <span class="hidden md:inline">Guardar Registro del Día</span>
-                    <span class="md:hidden">Guardar</span>
+            <!-- Acciones Principales -->
+            <div class="flex items-center gap-2 flex-wrap no-print">
+                <button onclick="guardarProgresoManual()" class="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-medium text-sm transition-all shadow-sm">
+                    <i data-lucide="save" class="w-4 h-4"></i> Guardar Día
                 </button>
-
-                <!-- Admin Mode Toggle -->
-                <button id="adminToggleBtn" onclick="toggleAdminAuth()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-slate-100 text-slate-700 hover:bg-slate-200">
-                    <i data-lucide="lock" class="w-3.5 h-3.5"></i>
-                    <span id="adminBtnText" class="hidden sm:inline">Modo Admin</span>
+                <button onclick="exportarAExcel()" class="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 px-4 py-2.5 rounded-xl font-medium text-sm transition-all">
+                    <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Excel
+                </button>
+                <button onclick="window.print()" class="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all" title="Imprimir o PDF">
+                    <i data-lucide="printer" class="w-5 h-5"></i>
+                </button>
+                <button onclick="toggleAdminModal(true)" class="p-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-xl transition-all" title="Gestionar Estudiantes">
+                    <i data-lucide="users" class="w-5 h-5"></i>
                 </button>
             </div>
-        </div>
-    </header>
+        </header>
 
-    <!-- Main Container -->
-    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
-
-        <!-- Date Picker & History Navigation Bar -->
-        <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3 no-print">
-            
-            <!-- Date Navigation Controls -->
-            <div class="flex items-center gap-1.5 w-full md:w-auto justify-between md:justify-start">
-                <button onclick="changeDateByDays(-1)" class="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-all flex items-center gap-1" title="Día Anterior">
-                    <i data-lucide="chevron-left" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Anterior</span>
+        <!-- NAVEGACIÓN DE FECHAS -->
+        <section class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 no-print">
+            <div class="flex items-center gap-2 w-full sm:w-auto">
+                <button onclick="cambiarFecha(-1)" class="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600">
+                    <i data-lucide="chevron-left" class="w-5 h-5"></i>
                 </button>
-
-                <div class="flex items-center bg-indigo-50 border border-indigo-200 px-3 py-1 rounded-lg">
-                    <i data-lucide="calendar" class="w-4 h-4 text-indigo-600 mr-2"></i>
-                    <span class="text-xs font-bold text-indigo-900 mr-2">Fecha:</span>
-                    <input type="date" id="currentDatePicker" class="bg-transparent border-none text-indigo-950 font-bold text-xs focus:outline-none cursor-pointer">
-                </div>
-
-                <button onclick="changeDateByDays(1)" class="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-all flex items-center gap-1" title="Día Siguiente">
-                    <span class="hidden sm:inline">Siguiente</span>
-                    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                <input type="date" id="fechaSelect" onchange="cargarFechaSeleccionada()" class="bg-slate-50 border border-slate-200 text-slate-800 text-sm font-semibold rounded-xl px-3 py-2 text-center focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-auto">
+                <button onclick="cambiarFecha(1)" class="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600">
+                    <i data-lucide="chevron-right" class="w-5 h-5"></i>
                 </button>
-
-                <button onclick="jumpToToday()" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold transition-all">
+                <button onclick="irAHoy()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-all">
                     Hoy
                 </button>
             </div>
-
-            <!-- Quick Access to Saved History Days -->
-            <div class="flex items-center gap-2 w-full md:w-auto overflow-x-auto custom-scrollbar py-1">
-                <span class="text-[11px] font-bold text-slate-400 whitespace-nowrap flex items-center gap-1">
-                    <i data-lucide="history" class="w-3.5 h-3.5"></i> Historial:
-                </span>
-                <div id="historyBadgesContainer" class="flex items-center gap-1.5">
-                    <!-- Dates dynamically injected -->
-                </div>
+            <div id="quickDates" class="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 text-xs">
+                <!-- Accesos rápidos generados por JS -->
             </div>
-        </div>
+        </section>
 
-        <!-- Navigation Tabs & Global Actions -->
-        <div class="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm no-print">
-            <!-- Navigation Tabs -->
-            <div class="flex items-center gap-1 w-full sm:w-auto bg-slate-100 p-1 rounded-lg text-xs font-semibold">
-                <button onclick="switchTab('checkin')" id="tabCheckin" class="px-3 py-1.5 rounded-md transition-all bg-white text-indigo-600 shadow-sm">
-                    <i data-lucide="user-check" class="w-3.5 h-3.5 inline mr-1"></i> Marcación / Lista
-                </button>
-                <button onclick="switchTab('dashboard')" id="tabDashboard" class="px-3 py-1.5 rounded-md transition-all text-slate-600 hover:text-slate-900">
-                    <i data-lucide="layout-dashboard" class="w-3.5 h-3.5 inline mr-1"></i> Resumen en Pantalla
-                </button>
-                <button id="adminRosterTab" onclick="switchTab('roster')" class="hidden px-3 py-1.5 rounded-md transition-all text-slate-600 hover:text-slate-900">
-                    <i data-lucide="users" class="w-3.5 h-3.5 inline mr-1"></i> Gestionar Estudiantes
-                </button>
-            </div>
-
-            <!-- Actions -->
-            <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
-                <button onclick="openClearDataModal()" class="px-2.5 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1">
-                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Borrar Lista Ficticia
-                </button>
-                <button onclick="exportCSV()" class="px-2.5 py-1.5 bg-slate-800 text-white hover:bg-slate-900 rounded-lg text-xs font-semibold transition-all flex items-center gap-1">
-                    <i data-lucide="download" class="w-3.5 h-3.5"></i> Exportar CSV
-                </button>
-                <button onclick="window.print()" class="px-2.5 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 rounded-lg text-xs font-semibold transition-all flex items-center gap-1">
-                    <i data-lucide="printer" class="w-3.5 h-3.5"></i> Imprimir
-                </button>
-            </div>
-        </div>
-
-        <!-- ================= COMPACT SUMMARY CARDS (ALWAYS VISIBLE - ALL TOTALS WITH M/F EXPLICIT ZEROS) ================= -->
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-            
-            <!-- 1. TOTAL DE ESTUDIANTES -->
-            <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                <div class="flex justify-between items-center text-slate-500">
-                    <span class="text-[11px] font-bold uppercase tracking-wider">Total Estudiantes</span>
-                    <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
+        <!-- DASHBOARD DE RESUMEN POR GÉNERO -->
+        <section class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <!-- Presentes -->
+            <div class="bg-white rounded-2xl p-4 border border-emerald-100 shadow-sm relative overflow-hidden">
+                <div class="flex justify-between items-start mb-2">
+                    <span class="text-xs font-bold uppercase tracking-wider text-emerald-600">Presentes</span>
+                    <i data-lucide="user-check" class="w-4 h-4 text-emerald-500"></i>
                 </div>
-                <div class="my-1.5">
-                    <span id="kpiTotal" class="text-2xl font-black text-slate-900">0</span>
-                    <span class="text-[10px] text-slate-400 block">Registrados</span>
-                </div>
-                <div class="grid grid-cols-2 gap-1 text-[11px] pt-1.5 border-t border-slate-100 font-bold">
-                    <div class="bg-blue-50 text-blue-800 px-1.5 py-0.5 rounded text-center">M: <span id="kpiTotalM">0</span></div>
-                    <div class="bg-pink-50 text-pink-800 px-1.5 py-0.5 rounded text-center">F: <span id="kpiTotalF">0</span></div>
+                <div id="statPresentes" class="text-2xl font-extrabold text-slate-900">0</div>
+                <div class="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                    <span>M: <strong id="statPresentesM" class="text-slate-800">0</strong></span>
+                    <span>F: <strong id="statPresentesF" class="text-slate-800">0</strong></span>
                 </div>
             </div>
 
-            <!-- 2. PRESENTES -->
-            <div class="bg-emerald-50/40 p-3 rounded-xl border border-emerald-200 shadow-sm flex flex-col justify-between">
-                <div class="flex justify-between items-center text-emerald-800">
-                    <span class="text-[11px] font-bold uppercase tracking-wider">Presentes</span>
-                    <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i>
+            <!-- Salud -->
+            <div class="bg-white rounded-2xl p-4 border border-blue-100 shadow-sm relative overflow-hidden">
+                <div class="flex justify-between items-start mb-2">
+                    <span class="text-xs font-bold uppercase tracking-wider text-blue-600">Permiso Salud</span>
+                    <i data-lucide="heart-pulse" class="w-4 h-4 text-blue-500"></i>
                 </div>
-                <div class="my-1.5 flex items-baseline gap-1.5">
-                    <span id="kpiPresentes" class="text-2xl font-black text-emerald-800">0</span>
-                    <span id="kpiPresentesPct" class="text-xs font-bold text-emerald-600">0%</span>
-                </div>
-                <div class="grid grid-cols-2 gap-1 text-[11px] pt-1.5 border-t border-emerald-100 font-bold">
-                    <div class="bg-emerald-100/80 text-emerald-900 px-1.5 py-0.5 rounded text-center">M: <span id="kpiPresentesM">0</span></div>
-                    <div class="bg-emerald-100/80 text-emerald-900 px-1.5 py-0.5 rounded text-center">F: <span id="kpiPresentesF">0</span></div>
+                <div id="statSalud" class="text-2xl font-extrabold text-slate-900">0</div>
+                <div class="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                    <span>M: <strong id="statSaludM" class="text-slate-800">0</strong></span>
+                    <span>F: <strong id="statSaludF" class="text-slate-800">0</strong></span>
                 </div>
             </div>
 
-            <!-- 3. INASISTENCIAS POR SALUD -->
-            <div class="bg-cyan-50/40 p-3 rounded-xl border border-cyan-200 shadow-sm flex flex-col justify-between">
-                <div class="flex justify-between items-center text-cyan-800">
-                    <span class="text-[11px] font-bold uppercase tracking-wider">Permiso Salud</span>
-                    <i data-lucide="stethoscope" class="w-4 h-4 text-cyan-600"></i>
+            <!-- Personal -->
+            <div class="bg-white rounded-2xl p-4 border border-amber-100 shadow-sm relative overflow-hidden">
+                <div class="flex justify-between items-start mb-2">
+                    <span class="text-xs font-bold uppercase tracking-wider text-amber-600">Permiso Personal</span>
+                    <i data-lucide="user-minus" class="w-4 h-4 text-amber-500"></i>
                 </div>
-                <div class="my-1.5 flex items-baseline gap-1.5">
-                    <span id="kpiSalud" class="text-2xl font-black text-cyan-800">0</span>
-                    <span id="kpiSaludPct" class="text-xs font-bold text-cyan-600">0%</span>
-                </div>
-                <div class="grid grid-cols-2 gap-1 text-[11px] pt-1.5 border-t border-cyan-100 font-bold">
-                    <div class="bg-cyan-100/80 text-cyan-900 px-1.5 py-0.5 rounded text-center">M: <span id="kpiSaludM">0</span></div>
-                    <div class="bg-cyan-100/80 text-cyan-900 px-1.5 py-0.5 rounded text-center">F: <span id="kpiSaludF">0</span></div>
+                <div id="statPersonal" class="text-2xl font-extrabold text-slate-900">0</div>
+                <div class="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                    <span>M: <strong id="statPersonalM" class="text-slate-800">0</strong></span>
+                    <span>F: <strong id="statPersonalF" class="text-slate-800">0</strong></span>
                 </div>
             </div>
 
-            <!-- 4. PERMISOS PERSONALES -->
-            <div class="bg-purple-50/40 p-3 rounded-xl border border-purple-200 shadow-sm flex flex-col justify-between">
-                <div class="flex justify-between items-center text-purple-800">
-                    <span class="text-[11px] font-bold uppercase tracking-wider">Permiso Personal</span>
-                    <i data-lucide="user-check" class="w-4 h-4 text-purple-600"></i>
+            <!-- Sin Justificar -->
+            <div class="bg-white rounded-2xl p-4 border border-rose-100 shadow-sm relative overflow-hidden">
+                <div class="flex justify-between items-start mb-2">
+                    <span class="text-xs font-bold uppercase tracking-wider text-rose-600">Sin Justificar</span>
+                    <i data-lucide="user-x" class="w-4 h-4 text-rose-500"></i>
                 </div>
-                <div class="my-1.5 flex items-baseline gap-1.5">
-                    <span id="kpiPersonal" class="text-2xl font-black text-purple-800">0</span>
-                    <span id="kpiPersonalPct" class="text-xs font-bold text-purple-600">0%</span>
-                </div>
-                <div class="grid grid-cols-2 gap-1 text-[11px] pt-1.5 border-t border-purple-100 font-bold">
-                    <div class="bg-purple-100/80 text-purple-900 px-1.5 py-0.5 rounded text-center">M: <span id="kpiPersonalM">0</span></div>
-                    <div class="bg-purple-100/80 text-purple-900 px-1.5 py-0.5 rounded text-center">F: <span id="kpiPersonalF">0</span></div>
+                <div id="statAusentes" class="text-2xl font-extrabold text-slate-900">0</div>
+                <div class="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                    <span>M: <strong id="statAusentesM" class="text-slate-800">0</strong></span>
+                    <span>F: <strong id="statAusentesF" class="text-slate-800">0</strong></span>
                 </div>
             </div>
+        </section>
 
-            <!-- 5. SIN JUSTIFICAR / AUSENTES -->
-            <div class="bg-rose-50/40 p-3 rounded-xl border border-rose-200 shadow-sm flex flex-col justify-between col-span-2 sm:col-span-1">
-                <div class="flex justify-between items-center text-rose-800">
-                    <span class="text-[11px] font-bold uppercase tracking-wider">Sin Justificar</span>
-                    <i data-lucide="x-circle" class="w-4 h-4 text-rose-600"></i>
-                </div>
-                <div class="my-1.5 flex items-baseline gap-1.5">
-                    <span id="kpiAusentes" class="text-2xl font-black text-rose-800">0</span>
-                    <span id="kpiAusentesPct" class="text-xs font-bold text-rose-600">0%</span>
-                </div>
-                <div class="grid grid-cols-2 gap-1 text-[11px] pt-1.5 border-t border-rose-100 font-bold">
-                    <div class="bg-rose-100/80 text-rose-900 px-1.5 py-0.5 rounded text-center">M: <span id="kpiAusentesM">0</span></div>
-                    <div class="bg-rose-100/80 text-rose-900 px-1.5 py-0.5 rounded text-center">F: <span id="kpiAusentesF">0</span></div>
-                </div>
+        <!-- RESUMEN GENERAL -->
+        <section class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between text-xs sm:text-sm">
+            <div class="flex items-center gap-2">
+                <span class="font-bold text-slate-700">Total de Estudiantes:</span>
+                <span id="statTotal" class="bg-slate-100 text-slate-800 font-extrabold px-2.5 py-1 rounded-lg">0</span>
             </div>
+            <div class="flex items-center gap-4 text-slate-500">
+                <span>Hombres (M): <strong id="statTotalM" class="text-slate-800">0</strong></span>
+                <span>Mujeres (F): <strong id="statTotalF" class="text-slate-800">0</strong></span>
+            </div>
+        </section>
 
-        </div>
-
-        <!-- ================= TAB 1: MARCACIÓN Y LISTA DE ESTUDIANTES ================= -->
-        <section id="sectionCheckin" class="space-y-3">
-            <!-- Search & Filters Bar -->
-            <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-2.5 no-print">
+        <!-- CONTROL Y REGISTRO DE ASISTENCIA -->
+        <section class="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+            <div class="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 no-print">
                 <div class="relative w-full sm:w-72">
-                    <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                    <input type="text" id="searchInput" oninput="renderCheckinList()" placeholder="Buscar estudiante por nombre..." class="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400"></i>
+                    <input type="text" id="searchInput" oninput="renderizarLista()" placeholder="Buscar estudiante..." class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                 </div>
-
                 <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
-                    <select id="genderFilter" onchange="renderCheckinList()" class="bg-slate-50 border border-slate-200 text-slate-700 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none">
-                        <option value="ALL">Todos los Géneros</option>
-                        <option value="M">Masculino (M)</option>
-                        <option value="F">Femenino (F)</option>
-                    </select>
-
-                    <select id="groupFilter" onchange="renderCheckinList()" class="bg-slate-50 border border-slate-200 text-slate-700 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none">
-                        <option value="ALL">Todos los Grupos</option>
-                    </select>
-
-                    <button id="btnBulkAbsent" onclick="bulkMarkAbsent()" class="hidden px-2.5 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 rounded-lg text-xs font-semibold">
-                        Marcar Restantes Ausentes
+                    <button onclick="marcarTodos('Presente')" class="text-xs bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 font-semibold px-3 py-2 rounded-xl transition-all">
+                        Todos Presentes
+                    </button>
+                    <button onclick="marcarTodos('Ausente')" class="text-xs bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 font-semibold px-3 py-2 rounded-xl transition-all">
+                        Restantes Ausentes
                     </button>
                 </div>
             </div>
 
-            <!-- Attendance Cards Grid -->
-            <div id="checkinGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                <!-- Cards injected dynamically -->
+            <!-- Lista de Estudiantes -->
+            <div class="divide-y divide-slate-100 max-h-[60vh] overflow-y-auto" id="estudiantesList">
+                <!-- Se llena dinámicamente con JS -->
             </div>
         </section>
+    </div>
 
-        <!-- ================= TAB 2: RESUMEN SINGLE-SCREEN DASHBOARD ================= -->
-        <section id="sectionDashboard" class="hidden space-y-4">
-            <!-- Summary Gender Breakdown Table -->
-            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2 flex items-center gap-2">
-                    <i data-lucide="bar-chart-2" class="w-4 h-4 text-indigo-600"></i>
-                    Consolidado General de Estudiantes por Género
+    <!-- MODAL DE GESTIÓN DE ESTUDIANTES (ADMIN) -->
+    <div id="adminModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5">
+            <div class="flex justify-between items-center">
+                <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <i data-lucide="users" class="w-5 h-5 text-indigo-600"></i> Gestión de Estudiantes
                 </h3>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left text-xs border border-slate-200 rounded-lg overflow-hidden">
-                        <thead class="bg-slate-100 text-slate-700 font-bold">
-                            <tr>
-                                <th class="p-2.5 border-b">Estado de Asistencia</th>
-                                <th class="p-2.5 border-b text-center bg-blue-50/50 text-blue-900">Masculino (M)</th>
-                                <th class="p-2.5 border-b text-center bg-pink-50/50 text-pink-900">Femenino (F)</th>
-                                <th class="p-2.5 border-b text-center bg-slate-200 font-extrabold text-slate-900">Total General</th>
-                            </tr>
-                        </thead>
-                        <tbody id="genderSummaryTable" class="divide-y divide-slate-200">
-                            <!-- Populated dynamically -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Detailed Table per Student -->
-            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <div class="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                    <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider">Detalle de Estudiantes del Día</h4>
-                    <div class="flex gap-1">
-                        <button onclick="setDashboardFilter('ALL')" id="filterBtnALL" class="dash-filter-btn px-2 py-1 rounded text-[11px] font-bold bg-indigo-600 text-white">Todos</button>
-                        <button onclick="setDashboardFilter('PRESENTE')" id="filterBtnPRESENTE" class="dash-filter-btn px-2 py-1 rounded text-[11px] font-semibold bg-white border border-slate-200 text-slate-600">Presentes</button>
-                        <button onclick="setDashboardFilter('SALUD')" id="filterBtnSALUD" class="dash-filter-btn px-2 py-1 rounded text-[11px] font-semibold bg-white border border-slate-200 text-slate-600">Salud</button>
-                        <button onclick="setDashboardFilter('PERSONAL')" id="filterBtnPERSONAL" class="dash-filter-btn px-2 py-1 rounded text-[11px] font-semibold bg-white border border-slate-200 text-slate-600">Personal</button>
-                        <button onclick="setDashboardFilter('AUSENTE')" id="filterBtnAUSENTE" class="dash-filter-btn px-2 py-1 rounded text-[11px] font-semibold bg-white border border-slate-200 text-slate-600">Sin Justificar</button>
-                    </div>
-                </div>
-                <div class="overflow-x-auto custom-scrollbar">
-                    <table class="w-full text-left border-collapse text-xs">
-                        <thead>
-                            <tr class="bg-slate-100 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200">
-                                <th class="py-2.5 px-3">Estudiante</th>
-                                <th class="py-2.5 px-3">Género</th>
-                                <th class="py-2.5 px-3">Grupo / Sección</th>
-                                <th class="py-2.5 px-3">Estado</th>
-                                <th class="py-2.5 px-3">Hora Marca</th>
-                                <th class="py-2.5 px-3">Justificación / Nota</th>
-                                <th class="py-2.5 px-3 text-right no-print">Acción</th>
-                            </tr>
-                        </thead>
-                        <tbody id="summaryTableBody" class="divide-y divide-slate-100 text-slate-700">
-                            <!-- Populated dynamically -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
-
-        <!-- ================= TAB 3: GESTIÓN DE ESTUDIANTES Y LISTA ================= -->
-        <section id="sectionRoster" class="hidden space-y-4 no-print">
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <!-- Add Single Student -->
-                <div class="lg:col-span-2 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                    <h3 class="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
-                        <i data-lucide="user-plus" class="w-4 h-4 text-indigo-600"></i> Agregar Nuevo Estudiante
-                    </h3>
-                    <form id="addPersonForm" onsubmit="handleAddPerson(event)" class="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                        <div class="sm:col-span-2">
-                            <label class="block text-[11px] font-semibold text-slate-600 mb-1">Nombre Completo del Estudiante *</label>
-                            <input type="text" id="newPersonName" required placeholder="Ej. Sofía Mariana Pérez" class="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                        </div>
-                        <div>
-                            <label class="block text-[11px] font-semibold text-slate-600 mb-1">Género *</label>
-                            <select id="newPersonGender" required class="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                                <option value="M">Masculino (M)</option>
-                                <option value="F">Femenino (F)</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-[11px] font-semibold text-slate-600 mb-1">Grupo / Sección</label>
-                            <input type="text" id="newPersonGroup" placeholder="Ej. Grado 10-A" class="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                        </div>
-                        <div class="sm:col-span-4 flex justify-end">
-                            <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors flex items-center gap-1.5">
-                                <i data-lucide="plus" class="w-3.5 h-3.5"></i> Agregar Estudiante
-                            </button>
-                        </div>
-                    </form>
-                </div>
-
-                <!-- Bulk Import Box -->
-                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                    <div>
-                        <h3 class="text-sm font-bold text-slate-900 mb-2 flex items-center gap-2">
-                            <i data-lucide="file-text" class="w-4 h-4 text-indigo-600"></i> Carga Masiva Rápida
-                        </h3>
-                        <p class="text-[11px] text-slate-500 mb-2">Pegue estudiantes (1 por línea): <code>Nombre, M/F, Grupo</code></p>
-                        <textarea id="bulkInput" rows="3" placeholder="Carlos Pérez, M, Grado 10-A&#10;Ana Gómez, F, Grado 10-A" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"></textarea>
-                    </div>
-                    <button onclick="handleBulkImport()" class="w-full mt-2 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold transition-all">
-                        Importar Estudiantes
-                    </button>
-                </div>
-            </div>
-
-            <!-- Current Roster List -->
-            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <div class="p-3 border-b border-slate-200 flex justify-between items-center">
-                    <h3 class="font-bold text-slate-900 text-xs uppercase tracking-wider">Lista de Estudiantes Registrados</h3>
-                    <span id="rosterCountBadge" class="text-xs bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-full font-bold">0 Estudiantes</span>
-                </div>
-                <div class="overflow-x-auto custom-scrollbar">
-                    <table class="w-full text-left border-collapse text-xs">
-                        <thead>
-                            <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
-                                <th class="py-2.5 px-3">Código</th>
-                                <th class="py-2.5 px-3">Nombre Completo</th>
-                                <th class="py-2.5 px-3">Género</th>
-                                <th class="py-2.5 px-3">Grupo</th>
-                                <th class="py-2.5 px-3 text-right">Acción</th>
-                            </tr>
-                        </thead>
-                        <tbody id="rosterTableBody" class="divide-y divide-slate-100 text-slate-700">
-                            <!-- Populated dynamically -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
-
-    </main>
-
-    <!-- Modal: Registrar Asistencia -->
-    <div id="attendanceModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-        <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-100">
-            <div class="flex justify-between items-start mb-3">
-                <div>
-                    <h3 class="text-base font-bold text-slate-900" id="modalPersonName">Estudiante</h3>
-                    <p class="text-xs text-slate-500" id="modalPersonGroup">Grupo / Género</p>
-                </div>
-                <button onclick="closeAttendanceModal()" class="text-slate-400 hover:text-slate-600 p-1">
-                    <i data-lucide="x" class="w-4 h-4"></i>
+                <button onclick="toggleAdminModal(false)" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-6 h-6"></i>
                 </button>
             </div>
 
-            <input type="hidden" id="modalPersonId">
-
-            <div class="space-y-2 mb-4">
-                <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">Seleccionar Estado:</label>
-                
-                <label class="flex items-center p-2.5 rounded-xl border border-slate-200 hover:border-emerald-500 cursor-pointer">
-                    <input type="radio" name="attendanceStatus" value="PRESENTE" checked onclick="toggleModalNoteField(false)" class="text-emerald-600">
-                    <span class="ml-2.5 font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Presente
-                    </span>
-                </label>
-
-                <label class="flex items-center p-2.5 rounded-xl border border-slate-200 hover:border-cyan-500 cursor-pointer">
-                    <input type="radio" name="attendanceStatus" value="SALUD" onclick="toggleModalNoteField(true)" class="text-cyan-600">
-                    <span class="ml-2.5 font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                        <span class="w-2 h-2 rounded-full bg-cyan-500"></span> Permiso por Salud
-                    </span>
-                </label>
-
-                <label class="flex items-center p-2.5 rounded-xl border border-slate-200 hover:border-purple-500 cursor-pointer">
-                    <input type="radio" name="attendanceStatus" value="PERSONAL" onclick="toggleModalNoteField(true)" class="text-purple-600">
-                    <span class="ml-2.5 font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                        <span class="w-2 h-2 rounded-full bg-purple-500"></span> Permiso Personal
-                    </span>
-                </label>
-
-                <label class="flex items-center p-2.5 rounded-xl border border-slate-200 hover:border-rose-500 cursor-pointer">
-                    <input type="radio" name="attendanceStatus" value="AUSENTE" onclick="toggleModalNoteField(false)" class="text-rose-600">
-                    <span class="ml-2.5 font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                        <span class="w-2 h-2 rounded-full bg-rose-500"></span> Sin Justificar / Ausente
-                    </span>
-                </label>
-            </div>
-
-            <div id="modalNoteContainer" class="hidden mb-4">
-                <label class="block text-[11px] font-semibold text-slate-600 mb-1">Motivo / Justificación *</label>
-                <textarea id="modalNoteInput" rows="2" placeholder="Escriba el motivo del permiso..." class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
-            </div>
-
-            <div class="flex gap-2">
-                <button type="button" onclick="closeAttendanceModal()" class="w-1/2 py-2 bg-slate-100 text-slate-700 font-semibold rounded-xl text-xs">Cancelar</button>
-                <button type="button" onclick="submitAttendanceModal()" class="w-1/2 py-2 bg-indigo-600 text-white font-semibold rounded-xl text-xs shadow-md">Guardar</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal: Borrar Lista Ficticia -->
-    <div id="clearDataModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-        <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-100 text-center">
-            <div class="w-10 h-10 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-3">
-                <i data-lucide="alert-triangle" class="w-5 h-5"></i>
-            </div>
-            <h3 class="text-base font-bold text-slate-900">¿Vaciar Lista de Estudiantes?</h3>
-            <p class="text-xs text-slate-500 mt-1 mb-4">Esta acción eliminará la lista de estudiantes ficticios para que pueda ingresar o importar su propia lista real.</p>
-
-            <div class="flex gap-2">
-                <button type="button" onclick="closeClearDataModal()" class="w-1/2 py-2 bg-slate-100 text-slate-700 font-semibold rounded-xl text-xs">Cancelar</button>
-                <button type="button" onclick="confirmClearAllData()" class="w-1/2 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-xs shadow-md">Sí, Borrar Lista</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal: PIN Admin -->
-    <div id="adminAuthModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-        <div class="bg-white rounded-2xl max-w-xs w-full p-5 shadow-2xl border border-slate-100">
-            <div class="text-center mb-3">
-                <h3 class="text-sm font-bold text-slate-900">Modo Administrador</h3>
-                <p class="text-[11px] text-slate-500">PIN de acceso (Predeterminado: <strong>1234</strong>)</p>
-            </div>
-            <form onsubmit="handleAdminLogin(event)" class="space-y-3">
-                <input type="password" id="adminPasskeyInput" placeholder="PIN" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-center text-base tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono">
-                <div class="flex gap-2">
-                    <button type="button" onclick="closeAdminAuthModal()" class="w-1/2 py-2 bg-slate-100 text-slate-700 font-semibold rounded-xl text-xs">Cancelar</button>
-                    <button type="submit" class="w-1/2 py-2 bg-indigo-600 text-white font-semibold rounded-xl text-xs">Acceder</button>
+            <!-- Formulario para agregar -->
+            <form onsubmit="agregarEstudiante(event)" class="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Nombre Completo</label>
+                    <input type="text" id="nuevoNombre" required placeholder="Ej. Juan Pérez" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div class="flex gap-3">
+                    <div class="flex-1">
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Género</label>
+                        <select id="nuevoGenero" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="M">Masculino (M)</option>
+                            <option value="F">Femenino (F)</option>
+                        </select>
+                    </div>
+                    <div class="flex items-end">
+                        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm px-4 py-2 rounded-xl transition-all flex items-center gap-2">
+                            <i data-lucide="plus" class="w-4 h-4"></i> Agregar
+                        </button>
+                    </div>
                 </div>
             </form>
+
+            <!-- Acciones de Limpieza -->
+            <div class="border-t border-slate-100 pt-4 flex items-center justify-between">
+                <button onclick="cargarEstudiantesEjemplo()" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">
+                    Restaurar Lista Ejemplo
+                </button>
+                <button onclick="borrarListaEstudiantes()" class="text-xs text-rose-600 hover:text-rose-800 font-medium">
+                    Borrar Toda la Lista
+                </button>
+            </div>
         </div>
     </div>
 
-    <!-- Footer -->
-    <footer class="bg-white border-t border-slate-200 py-3 text-center text-xs text-slate-400 no-print mt-auto">
-        Control de Asistencia de Estudiantes • Guardado Automático en Navegador (LocalStorage)
-    </footer>
-
-    <!-- Application Logic Script -->
+    <!-- LOGICA JAVASCRIPT -->
     <script>
-        // Initial Fictional Student Roster
-        const DEFAULT_ROSTER = [
-            { id: "EST001", name: "Carlos Eduardo Mendoza", gender: "M", group: "Grado 10-A" },
-            { id: "EST002", name: "Ana Sofía Rodríguez", gender: "F", group: "Grado 10-A" },
-            { id: "EST003", name: "Luis Fernando Gómez", gender: "M", group: "Grado 10-A" },
-            { id: "EST004", name: "Valeria Isabel Morales", gender: "F", group: "Grado 10-B" },
-            { id: "EST005", name: "Gabriel Alejandro Silva", gender: "M", group: "Grado 10-B" },
-            { id: "EST006", name: "Camila Andrea Torres", gender: "F", group: "Grado 10-B" }
+        // Lista inicial por defecto si la base de datos está vacía
+        const ESTUDIANTES_EJEMPLO = [
+            { id: '1', nombre: 'Carlos Eduardo Ramírez', genero: 'M' },
+            { id: '2', nombre: 'María Fernanda Gómez', genero: 'F' },
+            { id: '3', nombre: 'José Luis Hernández', genero: 'M' },
+            { id: '4', nombre: 'Ana Sofía Martínez', genero: 'F' },
+            { id: '5', nombre: 'Diego Alejandro Torres', genero: 'M' },
+            { id: '6', nombre: 'Valeria Isabel Castillo', genero: 'F' }
         ];
 
-        let roster = [];
-        let attendanceRecords = {};
-        let selectedDate = new Date().toISOString().split('T')[0];
-        let currentTab = 'checkin';
-        let dashboardFilter = 'ALL';
-        let isAdmin = false;
+        let estudiantes = [];
+        let registroAsistencia = {}; // Estructura: { "YYYY-MM-DD": { idEstudiante: { estado: 'Presente', nota: '' } } }
+        let fechaActual = new Date().toISOString().split('T')[0];
 
-        window.onload = function() {
+        // Inicialización
+        document.addEventListener('DOMContentLoaded', () => {
+            inicializarDatos();
+            document.getElementById('fechaSelect').value = fechaActual;
+            renderizarMenuFechas();
+            renderizarLista();
             lucide.createIcons();
-            initDatePicker();
-            loadStorage();
-            renderHistoryBadges();
-            renderAll();
-        };
+        });
 
-        function initDatePicker() {
-            const datePicker = document.getElementById('currentDatePicker');
-            datePicker.value = selectedDate;
-            datePicker.addEventListener('change', (e) => {
-                if (e.target.value) {
-                    selectedDate = e.target.value;
-                    renderAll();
-                }
-            });
-        }
-
-        function changeDateByDays(days) {
-            const currentDate = new Date(selectedDate + 'T00:00:00');
-            currentDate.setDate(currentDate.getDate() + days);
-            selectedDate = currentDate.toISOString().split('T')[0];
-            document.getElementById('currentDatePicker').value = selectedDate;
-            renderAll();
-        }
-
-        function jumpToToday() {
-            selectedDate = new Date().toISOString().split('T')[0];
-            document.getElementById('currentDatePicker').value = selectedDate;
-            renderAll();
-        }
-
-        function loadStorage() {
-            const savedRoster = localStorage.getItem('asistencia_estudiantes_roster');
-            if (savedRoster) {
-                roster = JSON.parse(savedRoster);
+        function inicializarDatos() {
+            const rawEstudiantes = localStorage.getItem('asistencia_estudiantes');
+            if (rawEstudiantes) {
+                estudiantes = JSON.parse(rawEstudiantes);
             } else {
-                roster = [...DEFAULT_ROSTER];
-                saveRoster();
+                estudiantes = [...ESTUDIANTES_EJEMPLO];
+                localStorage.setItem('asistencia_estudiantes', JSON.stringify(estudiantes));
             }
 
-            const savedAttendance = localStorage.getItem('asistencia_estudiantes_records');
-            if (savedAttendance) {
-                attendanceRecords = JSON.parse(savedAttendance);
+            const rawAsistencia = localStorage.getItem('asistencia_registros');
+            if (rawAsistencia) {
+                registroAsistencia = JSON.parse(rawAsistencia);
             }
         }
 
-        function saveRoster() {
-            localStorage.setItem('asistencia_estudiantes_roster', JSON.stringify(roster));
+        function guardarEnLocalStorage() {
+            localStorage.setItem('asistencia_estudiantes', JSON.stringify(estudiantes));
+            localStorage.setItem('asistencia_registros', JSON.stringify(registroAsistencia));
+            actualizarTextoUltimoGuardado();
         }
 
-        function saveAttendance() {
-            localStorage.setItem('asistencia_estudiantes_records', JSON.stringify(attendanceRecords));
-            updateTimestampUI();
-            renderHistoryBadges();
-        }
-
-        function saveManualRegistration() {
-            saveAttendance();
-            confetti({ particleCount: 30, spread: 50, origin: { y: 0.8 } });
-            showToast(`¡Registro del día (${selectedDate}) guardado con éxito!`, 'success');
-        }
-
-        function updateTimestampUI() {
+        function actualizarTextoUltimoGuardado() {
             const now = new Date();
             const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            document.getElementById('lastSaveTimestamp').innerText = `• Úl. Guardado: ${timeStr}`;
+            document.getElementById('lastSavedText').innerText = `Auto-guardado: ${timeStr}`;
         }
 
-        function getDayAttendance() {
-            if (!attendanceRecords[selectedDate]) {
-                attendanceRecords[selectedDate] = {};
-            }
-            return attendanceRecords[selectedDate];
+        function irAHoy() {
+            fechaActual = new Date().toISOString().split('T')[0];
+            document.getElementById('fechaSelect').value = fechaActual;
+            renderizarLista();
         }
 
-        // RENDER DATES WITH RECORD HISTORY
-        function renderHistoryBadges() {
-            const container = document.getElementById('historyBadgesContainer');
-            const dates = Object.keys(attendanceRecords).sort().reverse();
-
-            if (dates.length === 0) {
-                container.innerHTML = `<span class="text-[10px] text-slate-400 italic">Sin fechas guardadas aún</span>`;
-                return;
-            }
-
-            let html = '';
-            // Show up to 5 recent dates
-            dates.slice(0, 5).forEach(d => {
-                const isActive = d === selectedDate;
-                const activeClass = isActive 
-                    ? 'bg-indigo-600 text-white font-bold' 
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium';
-
-                html += `
-                    <button onclick="setDateAndRender('${d}')" class="px-2 py-0.5 rounded text-[10px] transition-all whitespace-nowrap ${activeClass}">
-                        ${d}
-                    </button>
-                `;
-            });
-
-            container.innerHTML = html;
+        function cambiarFecha(dias) {
+            const dateObj = new Date(fechaActual + 'T00:00:00');
+            dateObj.setDate(dateObj.getDate() + dias);
+            fechaActual = dateObj.toISOString().split('T')[0];
+            document.getElementById('fechaSelect').value = fechaActual;
+            renderizarLista();
         }
 
-        function setDateAndRender(d) {
-            selectedDate = d;
-            document.getElementById('currentDatePicker').value = selectedDate;
-            renderAll();
+        function cargarFechaSeleccionada() {
+            fechaActual = document.getElementById('fechaSelect').value;
+            renderizarLista();
         }
 
-        // MASTER RENDER CONTROLLER
-        function renderAll() {
-            populateGroupDropdown();
-            renderKPIsAndGenderSummary();
-            renderHistoryBadges();
-            if (currentTab === 'checkin') renderCheckinList();
-            if (currentTab === 'dashboard') renderDashboardTable();
-            if (currentTab === 'roster') renderRosterTable();
-            lucide.createIcons();
-        }
-
-        function populateGroupDropdown() {
-            const select = document.getElementById('groupFilter');
-            const currentVal = select.value;
-            const groups = [...new Set(roster.map(r => r.group).filter(Boolean))];
-            let html = `<option value="ALL">Todos los Grupos</option>`;
-            groups.forEach(g => {
-                html += `<option value="${g}">${g}</option>`;
-            });
-            select.innerHTML = html;
-            select.value = currentVal || "ALL";
-        }
-
-        // TOTALS & COMPACT GENDER BREAKDOWNS (GUARANTEES '0' EXPLICITLY)
-        function renderKPIsAndGenderSummary() {
-            const dayRecords = getDayAttendance();
-            const total = roster.length;
-
-            let counts = {
-                TOTAL: { M: 0, F: 0, sum: 0 },
-                PRESENTE: { M: 0, F: 0, sum: 0 },
-                SALUD: { M: 0, F: 0, sum: 0 },
-                PERSONAL: { M: 0, F: 0, sum: 0 },
-                AUSENTE: { M: 0, F: 0, sum: 0 }
-            };
-
-            roster.forEach(person => {
-                const g = person.gender === 'F' ? 'F' : 'M';
-                counts.TOTAL[g]++;
-                counts.TOTAL.sum++;
-
-                const rec = dayRecords[person.id];
-                const status = rec ? rec.status : 'AUSENTE';
-
-                if (counts[status]) {
-                    counts[status][g]++;
-                    counts[status].sum++;
-                }
-            });
-
-            // Update KPI Cards
-            document.getElementById('kpiTotal').innerText = counts.TOTAL.sum;
-            document.getElementById('kpiTotalM').innerText = counts.TOTAL.M;
-            document.getElementById('kpiTotalF').innerText = counts.TOTAL.F;
-
-            document.getElementById('kpiPresentes').innerText = counts.PRESENTE.sum;
-            document.getElementById('kpiPresentesPct').innerText = total ? `${Math.round((counts.PRESENTE.sum/total)*100)}%` : '0%';
-            document.getElementById('kpiPresentesM').innerText = counts.PRESENTE.M;
-            document.getElementById('kpiPresentesF').innerText = counts.PRESENTE.F;
-
-            document.getElementById('kpiSalud').innerText = counts.SALUD.sum;
-            document.getElementById('kpiSaludPct').innerText = total ? `${Math.round((counts.SALUD.sum/total)*100)}%` : '0%';
-            document.getElementById('kpiSaludM').innerText = counts.SALUD.M;
-            document.getElementById('kpiSaludF').innerText = counts.SALUD.F;
-
-            document.getElementById('kpiPersonal').innerText = counts.PERSONAL.sum;
-            document.getElementById('kpiPersonalPct').innerText = total ? `${Math.round((counts.PERSONAL.sum/total)*100)}%` : '0%';
-            document.getElementById('kpiPersonalM').innerText = counts.PERSONAL.M;
-            document.getElementById('kpiPersonalF').innerText = counts.PERSONAL.F;
-
-            document.getElementById('kpiAusentes').innerText = counts.AUSENTE.sum;
-            document.getElementById('kpiAusentesPct').innerText = total ? `${Math.round((counts.AUSENTE.sum/total)*100)}%` : '0%';
-            document.getElementById('kpiAusentesM').innerText = counts.AUSENTE.M;
-            document.getElementById('kpiAusentesF').innerText = counts.AUSENTE.F;
-
-            // Render Consolidated Gender Table
-            const summaryTable = document.getElementById('genderSummaryTable');
-            summaryTable.innerHTML = `
-                <tr class="hover:bg-slate-50">
-                    <td class="p-2.5 font-bold text-emerald-800 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> Presentes</td>
-                    <td class="p-2.5 text-center font-bold text-blue-800 bg-blue-50/20">${counts.PRESENTE.M}</td>
-                    <td class="p-2.5 text-center font-bold text-pink-800 bg-pink-50/20">${counts.PRESENTE.F}</td>
-                    <td class="p-2.5 text-center font-black text-slate-900 bg-slate-100">${counts.PRESENTE.sum}</td>
-                </tr>
-                <tr class="hover:bg-slate-50">
-                    <td class="p-2.5 font-bold text-cyan-800 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-cyan-500"></span> Permiso por Salud</td>
-                    <td class="p-2.5 text-center font-bold text-blue-800 bg-blue-50/20">${counts.SALUD.M}</td>
-                    <td class="p-2.5 text-center font-bold text-pink-800 bg-pink-50/20">${counts.SALUD.F}</td>
-                    <td class="p-2.5 text-center font-black text-slate-900 bg-slate-100">${counts.SALUD.sum}</td>
-                </tr>
-                <tr class="hover:bg-slate-50">
-                    <td class="p-2.5 font-bold text-purple-800 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-purple-500"></span> Permiso Personal</td>
-                    <td class="p-2.5 text-center font-bold text-blue-800 bg-blue-50/20">${counts.PERSONAL.M}</td>
-                    <td class="p-2.5 text-center font-bold text-pink-800 bg-pink-50/20">${counts.PERSONAL.F}</td>
-                    <td class="p-2.5 text-center font-black text-slate-900 bg-slate-100">${counts.PERSONAL.sum}</td>
-                </tr>
-                <tr class="hover:bg-slate-50">
-                    <td class="p-2.5 font-bold text-rose-800 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-rose-500"></span> Sin Justificar / Ausentes</td>
-                    <td class="p-2.5 text-center font-bold text-blue-800 bg-blue-50/20">${counts.AUSENTE.M}</td>
-                    <td class="p-2.5 text-center font-bold text-pink-800 bg-pink-50/20">${counts.AUSENTE.F}</td>
-                    <td class="p-2.5 text-center font-black text-slate-900 bg-slate-100">${counts.AUSENTE.sum}</td>
-                </tr>
-                <tr class="bg-slate-100 font-extrabold text-slate-900">
-                    <td class="p-2.5 uppercase">TOTAL DE ESTUDIANTES</td>
-                    <td class="p-2.5 text-center text-blue-950">${counts.TOTAL.M}</td>
-                    <td class="p-2.5 text-center text-pink-950">${counts.TOTAL.F}</td>
-                    <td class="p-2.5 text-center bg-slate-200 text-slate-900">${counts.TOTAL.sum}</td>
-                </tr>
-            `;
-        }
-
-        // RENDER CHECKIN LIST
-        function renderCheckinList() {
-            const grid = document.getElementById('checkinGrid');
-            const search = document.getElementById('searchInput').value.toLowerCase().trim();
-            const selectedGroup = document.getElementById('groupFilter').value;
-            const selectedGender = document.getElementById('genderFilter').value;
-            const dayRecords = getDayAttendance();
-
-            let filtered = roster.filter(p => {
-                const matchSearch = p.name.toLowerCase().includes(search);
-                const matchGroup = selectedGroup === 'ALL' || p.group === selectedGroup;
-                const matchGender = selectedGender === 'ALL' || p.gender === selectedGender;
-                return matchSearch && matchGroup && matchGender;
-            });
-
-            if (filtered.length === 0) {
-                grid.innerHTML = `
-                    <div class="col-span-full text-center py-8 bg-white rounded-xl border border-slate-200">
-                        <i data-lucide="user-x" class="w-8 h-8 text-slate-300 mx-auto mb-1"></i>
-                        <p class="text-xs text-slate-500">No hay estudiantes que coincidan con el filtro.</p>
-                    </div>
-                `;
-                lucide.createIcons();
-                return;
-            }
-
-            let html = '';
-            filtered.forEach(person => {
-                const rec = dayRecords[person.id];
-                const status = rec ? rec.status : 'AUSENTE';
-                const time = rec ? rec.timestamp : '';
-                const note = rec ? rec.note : '';
-
-                let statusBadge = '';
-                let borderStyle = 'border-slate-200 bg-white';
-
-                if (status === 'PRESENTE') {
-                    borderStyle = 'border-emerald-300 bg-emerald-50/20';
-                    statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">Presente</span>`;
-                } else if (status === 'SALUD') {
-                    borderStyle = 'border-cyan-300 bg-cyan-50/20';
-                    statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-100 text-cyan-800">P. Salud</span>`;
-                } else if (status === 'PERSONAL') {
-                    borderStyle = 'border-purple-300 bg-purple-50/20';
-                    statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800">P. Personal</span>`;
-                } else {
-                    statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">Sin Marcar</span>`;
-                }
-
-                const genderTag = person.gender === 'F' 
-                    ? `<span class="bg-pink-100 text-pink-700 text-[10px] font-bold px-1.5 py-0.5 rounded">Femenino</span>`
-                    : `<span class="bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded">Masculino</span>`;
-
-                html += `
-                    <div class="rounded-xl border ${borderStyle} p-3 shadow-sm flex flex-col justify-between">
-                        <div>
-                            <div class="flex justify-between items-start">
-                                <div>
-                                    <h4 class="font-bold text-slate-900 text-sm leading-tight">${person.name}</h4>
-                                    <div class="flex items-center gap-1 mt-1">
-                                        <span class="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">${person.group || 'Sin grupo'}</span>
-                                        ${genderTag}
-                                    </div>
-                                </div>
-                                ${statusBadge}
-                            </div>
-                            ${time ? `<p class="text-[10px] text-slate-400 mt-2">Hora marca: ${time}</p>` : ''}
-                            ${note ? `<p class="text-[11px] text-slate-700 italic bg-white p-1.5 rounded border border-slate-100 mt-1">"${note}"</p>` : ''}
-                        </div>
-
-                        <div class="mt-3 pt-2 border-t border-slate-100 flex gap-1.5">
-                            <button onclick="quickMark('${person.id}', 'PRESENTE')" class="flex-1 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm flex items-center justify-center gap-1">
-                                <i data-lucide="check" class="w-3.5 h-3.5"></i> Presente
-                            </button>
-                            <button onclick="openAttendanceModal('${person.id}')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold">
-                                Opciones / Nota
-                            </button>
-                        </div>
-                    </div>
-                `;
-            });
-
-            grid.innerHTML = html;
-            lucide.createIcons();
-        }
-
-        // QUICK MARK
-        function quickMark(personId, status) {
-            const now = new Date();
-            const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-            const dayRecords = getDayAttendance();
-            dayRecords[personId] = {
-                status: status,
-                timestamp: timeString,
-                note: ''
-            };
-
-            saveAttendance();
-            renderAll();
-            confetti({ particleCount: 30, spread: 50, origin: { y: 0.8 } });
-            showToast('Asistencia marcada y auto-guardada', 'success');
-        }
-
-        // ATTENDANCE MODAL
-        function openAttendanceModal(personId) {
-            const person = roster.find(r => r.id === personId);
-            if (!person) return;
-
-            document.getElementById('modalPersonId').value = person.id;
-            document.getElementById('modalPersonName').innerText = person.name;
-            document.getElementById('modalPersonGroup').innerText = `${person.group || 'Sin grupo'} • Género: ${person.gender === 'F' ? 'Femenino' : 'Masculino'}`;
-
-            const dayRecords = getDayAttendance();
-            const rec = dayRecords[person.id];
-
-            if (rec) {
-                const radios = document.getElementsByName('attendanceStatus');
-                for (let r of radios) {
-                    if (r.value === rec.status) r.checked = true;
-                }
-                document.getElementById('modalNoteInput').value = rec.note || '';
-                toggleModalNoteField(rec.status === 'SALUD' || rec.status === 'PERSONAL');
-            } else {
-                document.getElementsByName('attendanceStatus')[0].checked = true;
-                document.getElementById('modalNoteInput').value = '';
-                toggleModalNoteField(false);
-            }
-
-            document.getElementById('attendanceModal').classList.remove('hidden');
-        }
-
-        function closeAttendanceModal() {
-            document.getElementById('attendanceModal').classList.add('hidden');
-        }
-
-        function toggleModalNoteField(show) {
-            const container = document.getElementById('modalNoteContainer');
-            if (show) container.classList.remove('hidden');
-            else container.classList.add('hidden');
-        }
-
-        function submitAttendanceModal() {
-            const personId = document.getElementById('modalPersonId').value;
-            const radios = document.getElementsByName('attendanceStatus');
-            let selectedStatus = 'PRESENTE';
-            for (let r of radios) {
-                if (r.checked) selectedStatus = r.value;
-            }
-
-            const note = document.getElementById('modalNoteInput').value.trim();
-            const now = new Date();
-            const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-            const dayRecords = getDayAttendance();
-            dayRecords[personId] = {
-                status: selectedStatus,
-                timestamp: timeString,
-                note: note
-            };
-
-            saveAttendance();
-            closeAttendanceModal();
-            renderAll();
-            showToast('Registro guardado correctamente', 'info');
-        }
-
-        // BULK MARK ABSENT
-        function bulkMarkAbsent() {
-            const dayRecords = getDayAttendance();
-            let count = 0;
-
-            roster.forEach(person => {
-                if (!dayRecords[person.id]) {
-                    dayRecords[person.id] = {
-                        status: 'AUSENTE',
-                        timestamp: 'Auto-registrado',
-                        note: 'Sin Justificar'
-                    };
-                    count++;
-                }
-            });
-
-            saveAttendance();
-            renderAll();
-            showToast(`Se marcaron ${count} faltas pendientes`, 'info');
-        }
-
-        // CLEAR FICTIONAL DATA
-        function openClearDataModal() {
-            document.getElementById('clearDataModal').classList.remove('hidden');
-        }
-
-        function closeClearDataModal() {
-            document.getElementById('clearDataModal').classList.add('hidden');
-        }
-
-        function confirmClearAllData() {
-            roster = [];
-            attendanceRecords = {};
-            localStorage.removeItem('asistencia_estudiantes_roster');
-            localStorage.removeItem('asistencia_estudiantes_records');
-
-            closeClearDataModal();
-            renderAll();
-            showToast('Lista eliminada. Puede agregar sus estudiantes.', 'warning');
-        }
-
-        // DASHBOARD TABLE RENDER
-        function setDashboardFilter(filter) {
-            dashboardFilter = filter;
-            document.querySelectorAll('.dash-filter-btn').forEach(btn => {
-                btn.className = "dash-filter-btn px-2 py-1 rounded text-[11px] font-semibold bg-white border border-slate-200 text-slate-600";
-            });
-
-            const activeBtn = document.getElementById(`filterBtn${filter}`);
-            if (activeBtn) {
-                activeBtn.className = "dash-filter-btn px-2 py-1 rounded text-[11px] font-bold bg-indigo-600 text-white";
-            }
-
-            renderDashboardTable();
-        }
-
-        function renderDashboardTable() {
-            const tbody = document.getElementById('summaryTableBody');
-            const dayRecords = getDayAttendance();
-
-            let list = roster.map(person => {
-                const rec = dayRecords[person.id];
-                return {
-                    id: person.id,
-                    name: person.name,
-                    gender: person.gender,
-                    group: person.group || '-',
-                    status: rec ? rec.status : 'AUSENTE',
-                    time: rec ? rec.timestamp : '-',
-                    note: rec ? rec.note : ''
+        function renderizarMenuFechas() {
+            const container = document.getElementById('quickDates');
+            container.innerHTML = '';
+            const hoy = new Date();
+            
+            for (let i = 4; i >= 0; i--) {
+                const d = new Date(hoy);
+                d.setDate(d.getDate() - i);
+                const iso = d.toISOString().split('T')[0];
+                const nomDia = d.toLocaleDateString('es-ES', { weekday: 'short' });
+                
+                const btn = document.createElement('button');
+                btn.className = `px-2.5 py-1 rounded-lg border font-medium transition-all ${iso === fechaActual ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`;
+                btn.innerText = i === 0 ? 'Hoy' : `${nomDia} ${d.getDate()}`;
+                btn.onclick = () => {
+                    fechaActual = iso;
+                    document.getElementById('fechaSelect').value = iso;
+                    renderizarMenuFechas();
+                    renderizarLista();
                 };
-            });
-
-            if (dashboardFilter !== 'ALL') {
-                list = list.filter(item => item.status === dashboardFilter);
+                container.appendChild(btn);
             }
-
-            if (list.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-slate-400">No hay estudiantes para mostrar en esta categoría.</td></tr>`;
-                return;
-            }
-
-            let html = '';
-            list.forEach(item => {
-                let badge = '';
-                if (item.status === 'PRESENTE') badge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">Presente</span>`;
-                else if (item.status === 'SALUD') badge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-100 text-cyan-800">P. Salud</span>`;
-                else if (item.status === 'PERSONAL') badge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800">P. Personal</span>`;
-                else badge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">Sin Justificar</span>`;
-
-                const genderBadge = item.gender === 'F' 
-                    ? `<span class="text-pink-700 font-bold">Femenino</span>` 
-                    : `<span class="text-blue-700 font-bold">Masculino</span>`;
-
-                html += `
-                    <tr class="hover:bg-slate-50 transition-colors">
-                        <td class="py-2.5 px-3 font-semibold text-slate-900">${item.name}</td>
-                        <td class="py-2.5 px-3">${genderBadge}</td>
-                        <td class="py-2.5 px-3 text-slate-600">${item.group}</td>
-                        <td class="py-2.5 px-3">${badge}</td>
-                        <td class="py-2.5 px-3 text-slate-500">${item.time}</td>
-                        <td class="py-2.5 px-3 ${item.note ? 'text-slate-800 italic font-medium' : 'text-slate-400'}">${item.note || 'Sin justificación'}</td>
-                        <td class="py-2.5 px-3 text-right no-print">
-                            <button onclick="openAttendanceModal('${item.id}')" class="text-indigo-600 font-bold hover:underline">
-                                Cambiar
-                            </button>
-                        </td>
-                    </tr>
-                `;
-            });
-
-            tbody.innerHTML = html;
         }
 
-        // ADD SINGLE STUDENT
-        function handleAddPerson(e) {
-            e.preventDefault();
-            const name = document.getElementById('newPersonName').value.trim();
-            const gender = document.getElementById('newPersonGender').value;
-            const group = document.getElementById('newPersonGroup').value.trim() || 'General';
+        function cambiarEstado(idEstudiante, nuevoEstado) {
+            if (!registroAsistencia[fechaActual]) {
+                registroAsistencia[fechaActual] = {};
+            }
+            if (!registroAsistencia[fechaActual][idEstudiante]) {
+                registroAsistencia[fechaActual][idEstudiante] = { estado: 'Sin marcar', nota: '' };
+            }
 
-            if (!name) return;
-
-            const newId = 'EST' + String(roster.length + 1).padStart(3, '0');
-            roster.push({ id: newId, name, gender, group });
-
-            saveRoster();
-            document.getElementById('newPersonName').value = '';
-            document.getElementById('newPersonGroup').value = '';
-
-            renderAll();
-            showToast('Estudiante agregado correctamente', 'success');
+            registroAsistencia[fechaActual][idEstudiante].estado = nuevoEstado;
+            guardarEnLocalStorage();
+            renderizarLista();
         }
 
-        // BULK IMPORT
-        function handleBulkImport() {
-            const raw = document.getElementById('bulkInput').value.trim();
-            if (!raw) return;
+        function guardarNota(idEstudiante, nota) {
+            if (!registroAsistencia[fechaActual]) registroAsistencia[fechaActual] = {};
+            if (!registroAsistencia[fechaActual][idEstudiante]) {
+                registroAsistencia[fechaActual][idEstudiante] = { estado: 'Sin marcar', nota: '' };
+            }
+            registroAsistencia[fechaActual][idEstudiante].nota = nota;
+            guardarEnLocalStorage();
+        }
 
-            const lines = raw.split('\n');
-            let added = 0;
-
-            lines.forEach(line => {
-                const parts = line.split(',');
-                if (parts[0] && parts[0].trim()) {
-                    const name = parts[0].trim();
-                    let gender = 'M';
-                    if (parts[1] && parts[1].trim().toUpperCase().startsWith('F')) gender = 'F';
-                    const group = (parts[2] && parts[2].trim()) ? parts[2].trim() : 'General';
-
-                    const newId = 'EST' + String(roster.length + 1).padStart(3, '0');
-                    roster.push({ id: newId, name, gender, group });
-                    added++;
+        function marcarTodos(estado) {
+            if (!registroAsistencia[fechaActual]) registroAsistencia[fechaActual] = {};
+            estudiantes.forEach(est => {
+                if (!registroAsistencia[fechaActual][est.id] || registroAsistencia[fechaActual][est.id].estado === 'Sin marcar') {
+                    registroAsistencia[fechaActual][est.id] = {
+                        estado: estado,
+                        nota: registroAsistencia[fechaActual][est.id]?.nota || ''
+                    };
                 }
             });
-
-            saveRoster();
-            document.getElementById('bulkInput').value = '';
-            renderAll();
-            showToast(`Se importaron ${added} estudiantes a la lista`, 'success');
+            guardarEnLocalStorage();
+            renderizarLista();
+            mostrarToast(`Registrados como: ${estado}`);
         }
 
-        function deletePerson(id) {
-            roster = roster.filter(r => r.id !== id);
-            saveRoster();
-            renderAll();
-            showToast('Estudiante eliminado', 'info');
-        }
+        function renderizarLista() {
+            renderizarMenuFechas();
+            const busqueda = document.getElementById('searchInput').value.toLowerCase();
+            const container = document.getElementById('estudiantesList');
+            container.innerHTML = '';
 
-        function renderRosterTable() {
-            const tbody = document.getElementById('rosterTableBody');
-            document.getElementById('rosterCountBadge').innerText = `${roster.length} Estudiantes`;
+            const registroDia = registroAsistencia[fechaActual] || {};
 
-            if (roster.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-slate-400">Lista vacía. Agregue estudiantes arriba.</td></tr>`;
+            // Contadores
+            let stats = {
+                Presente: { M: 0, F: 0 },
+                Salud: { M: 0, F: 0 },
+                Personal: { M: 0, F: 0 },
+                Ausente: { M: 0, F: 0 },
+                Total: { M: 0, F: 0 }
+            };
+
+            const estudiantesFiltrados = estudiantes.filter(e => e.nombre.toLowerCase().includes(busqueda));
+
+            estudiantes.forEach(est => {
+                const genero = est.genero || 'M';
+                stats.Total[genero]++;
+
+                const st = registroDia[est.id]?.estado || 'Sin marcar';
+                if (st === 'Presente') stats.Presente[genero]++;
+                else if (st === 'Permiso Salud') stats.Salud[genero]++;
+                else if (st === 'Permiso Personal') stats.Personal[genero]++;
+                else if (st === 'Ausente') stats.Ausente[genero]++;
+            });
+
+            // Actualizar KPIs en el Dashboard
+            document.getElementById('statPresentes').innerText = stats.Presente.M + stats.Presente.F;
+            document.getElementById('statPresentesM').innerText = stats.Presente.M;
+            document.getElementById('statPresentesF').innerText = stats.Presente.F;
+
+            document.getElementById('statSalud').innerText = stats.Salud.M + stats.Salud.F;
+            document.getElementById('statSaludM').innerText = stats.Salud.M;
+            document.getElementById('statSaludF').innerText = stats.Salud.F;
+
+            document.getElementById('statPersonal').innerText = stats.Personal.M + stats.Personal.F;
+            document.getElementById('statPersonalM').innerText = stats.Personal.M;
+            document.getElementById('statPersonalF').innerText = stats.Personal.F;
+
+            document.getElementById('statAusentes').innerText = stats.Ausente.M + stats.Ausente.F;
+            document.getElementById('statAusentesM').innerText = stats.Ausente.M;
+            document.getElementById('statAusentesF').innerText = stats.Ausente.F;
+
+            document.getElementById('statTotal').innerText = stats.Total.M + stats.Total.F;
+            document.getElementById('statTotalM').innerText = stats.Total.M;
+            document.getElementById('statTotalF').innerText = stats.Total.F;
+
+            if (estudiantesFiltrados.length === 0) {
+                container.innerHTML = `
+                    <div class="p-8 text-center text-slate-400 text-sm">
+                        No se encontraron estudiantes registrados.
+                    </div>
+                `;
                 return;
             }
 
-            let html = '';
-            roster.forEach(p => {
-                html += `
-                    <tr class="hover:bg-slate-50">
-                        <td class="py-2.5 px-3 font-mono text-slate-400">${p.id}</td>
-                        <td class="py-2.5 px-3 font-bold text-slate-900">${p.name}</td>
-                        <td class="py-2.5 px-3 font-bold ${p.gender === 'F' ? 'text-pink-600' : 'text-blue-600'}">${p.gender === 'F' ? 'Femenino' : 'Masculino'}</td>
-                        <td class="py-2.5 px-3 text-slate-600">${p.group || '-'}</td>
-                        <td class="py-2.5 px-3 text-right">
-                            <button onclick="deletePerson('${p.id}')" class="text-rose-600 hover:bg-rose-50 p-1 rounded">
-                                <i data-lucide="trash-2" class="w-4 h-4"></i>
-                            </button>
-                        </td>
-                    </tr>
+            estudiantesFiltrados.forEach((est, idx) => {
+                const reg = registroDia[est.id] || { estado: 'Sin marcar', nota: '' };
+                const div = document.createElement('div');
+                div.className = 'p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/80 transition-all';
+                
+                div.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs font-bold text-slate-400 w-5">${idx + 1}.</span>
+                        <div>
+                            <div class="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                                ${est.nombre}
+                                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${est.genero === 'M' ? 'bg-blue-50 text-blue-600' : 'bg-pink-50 text-pink-600'}">
+                                    ${est.genero}
+                                </span>
+                            </div>
+                            <input type="text" placeholder="Agregar nota o motivo..." value="${reg.nota || ''}" 
+                                onchange="guardarNota('${est.id}', this.value)"
+                                class="mt-1 text-xs text-slate-500 bg-transparent border-b border-transparent hover:border-slate-200 focus:border-indigo-500 focus:outline-none w-full sm:w-64">
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 no-print">
+                        <button onclick="cambiarEstado('${est.id}', 'Presente')" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${reg.estado === 'Presente' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'}">
+                            Presente
+                        </button>
+                        <button onclick="cambiarEstado('${est.id}', 'Permiso Salud')" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${reg.estado === 'Permiso Salud' ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-700'}">
+                            Salud
+                        </button>
+                        <button onclick="cambiarEstado('${est.id}', 'Permiso Personal')" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${reg.estado === 'Permiso Personal' ? 'bg-amber-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-amber-50 hover:text-amber-700'}">
+                            Personal
+                        </button>
+                        <button onclick="cambiarEstado('${est.id}', 'Ausente')" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${reg.estado === 'Ausente' ? 'bg-rose-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-rose-50 hover:text-rose-700'}">
+                            Ausente
+                        </button>
+                    </div>
                 `;
+                container.appendChild(div);
             });
 
-            tbody.innerHTML = html;
             lucide.createIcons();
         }
 
-        // ADMIN AUTH
-        function toggleAdminAuth() {
-            if (isAdmin) {
-                isAdmin = false;
-                updateAdminUI();
-                showToast('Modo administrador desactivado', 'info');
-            } else {
-                document.getElementById('adminAuthModal').classList.remove('hidden');
-                document.getElementById('adminPasskeyInput').focus();
+        // Exportación a Excel Segura para Celulares
+        function exportarAExcel() {
+            try {
+                const registroDia = registroAsistencia[fechaActual] || {};
+                const datos = [
+                    ["REPORTE DE ASISTENCIA ESCOLAR"],
+                    ["Fecha:", fechaActual],
+                    [],
+                    ["N°", "Estudiante", "Género", "Estado", "Justificación / Observaciones"]
+                ];
+
+                estudiantes.forEach((est, index) => {
+                    const reg = registroDia[est.id] || { estado: 'Sin marcar', nota: '' };
+                    datos.push([
+                        index + 1,
+                        est.nombre,
+                        est.genero === 'M' ? 'Masculino' : 'Femenino',
+                        reg.estado,
+                        reg.nota || ''
+                    ]);
+                });
+
+                if (typeof XLSX !== 'undefined') {
+                    const wb = XLSX.utils.book_new();
+                    const ws = XLSX.utils.aoa_to_sheet(datos);
+                    XLSX.utils.book_append_sheet(wb, ws, "Asistencia");
+                    XLSX.writeFile(wb, `Asistencia_${fechaActual}.xlsx`);
+                    mostrarToast("Excel generado con éxito");
+                } else {
+                    // Descarga alternativa tipo CSV
+                    let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+                    datos.forEach(row => { csvContent += row.map(e => `"${e}"`).join(",") + "\n"; });
+                    const encodedUri = encodeURI(csvContent);
+                    const link = document.createElement("a");
+                    link.setAttribute("href", encodedUri);
+                    link.setAttribute("download", `Asistencia_${fechaActual}.csv`);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    mostrarToast("CSV generado con éxito");
+                }
+            } catch (err) {
+                alert("Error al descargar reporte: " + err.message);
             }
         }
 
-        function closeAdminAuthModal() {
-            document.getElementById('adminAuthModal').classList.add('hidden');
-            document.getElementById('adminPasskeyInput').value = '';
+        function guardarProgresoManual() {
+            guardarEnLocalStorage();
+            mostrarToast("Registro del día guardado");
         }
 
-        function handleAdminLogin(e) {
+        function toggleAdminModal(show) {
+            document.getElementById('adminModal').classList.toggle('hidden', !show);
+        }
+
+        function agregarEstudiante(e) {
             e.preventDefault();
-            const pin = document.getElementById('adminPasskeyInput').value;
-            if (pin === '1234' || pin === 'admin') {
-                isAdmin = true;
-                closeAdminAuthModal();
-                updateAdminUI();
-                showToast('Modo administrador activado', 'success');
-            } else {
-                showToast('PIN incorrecto (Usar 1234)', 'error');
-            }
-        }
+            const nombre = document.getElementById('nuevoNombre').value.trim();
+            const genero = document.getElementById('nuevoGenero').value;
+            if (!nombre) return;
 
-        function updateAdminUI() {
-            const btnText = document.getElementById('adminBtnText');
-            const btnBulk = document.getElementById('btnBulkAbsent');
-            const rosterTab = document.getElementById('adminRosterTab');
-
-            if (isAdmin) {
-                btnText.innerText = 'Salir Admin';
-                btnBulk.classList.remove('hidden');
-                rosterTab.classList.remove('hidden');
-            } else {
-                btnText.innerText = 'Modo Admin';
-                btnBulk.classList.add('hidden');
-                rosterTab.classList.add('hidden');
-                if (currentTab === 'roster') switchTab('checkin');
-            }
-        }
-
-        // TAB SWITCHING
-        function switchTab(tab) {
-            currentTab = tab;
-
-            document.getElementById('sectionCheckin').classList.add('hidden');
-            document.getElementById('sectionDashboard').classList.add('hidden');
-            document.getElementById('sectionRoster').classList.add('hidden');
-
-            const tabCheckin = document.getElementById('tabCheckin');
-            const tabDashboard = document.getElementById('tabDashboard');
-            const tabRoster = document.getElementById('adminRosterTab');
-
-            [tabCheckin, tabDashboard, tabRoster].forEach(t => {
-                if (t) t.className = "px-3 py-1.5 rounded-md transition-all text-slate-600 hover:text-slate-900";
+            estudiantes.push({
+                id: Date.now().toString(),
+                nombre: nombre,
+                genero: genero
             });
 
-            if (tab === 'checkin') {
-                document.getElementById('sectionCheckin').classList.remove('hidden');
-                tabCheckin.className = "px-3 py-1.5 rounded-md transition-all bg-white text-indigo-600 shadow-sm font-bold";
-            } else if (tab === 'dashboard') {
-                document.getElementById('sectionDashboard').classList.remove('hidden');
-                tabDashboard.className = "px-3 py-1.5 rounded-md transition-all bg-white text-indigo-600 shadow-sm font-bold";
-            } else if (tab === 'roster') {
-                document.getElementById('sectionRoster').classList.remove('hidden');
-                tabRoster.className = "px-3 py-1.5 rounded-md transition-all bg-white text-indigo-600 shadow-sm font-bold";
+            document.getElementById('nuevoNombre').value = '';
+            guardarEnLocalStorage();
+            renderizarLista();
+            mostrarToast("Estudiante agregado");
+        }
+
+        function borrarListaEstudiantes() {
+            if (confirm("¿Estás seguro de borrar toda la lista de estudiantes?")) {
+                estudiantes = [];
+                guardarEnLocalStorage();
+                renderizarLista();
+                mostrarToast("Lista eliminada");
             }
-
-            renderAll();
         }
 
-        // EXPORT CSV
-        function exportCSV() {
-            const dayRecords = getDayAttendance();
-            let csvContent = "data:text/csv;charset=utf-8,";
-            csvContent += "Codigo,Estudiante,Genero,Grupo,Estado,Hora,Justificacion,Fecha\n";
-
-            roster.forEach(person => {
-                const rec = dayRecords[person.id];
-                const status = rec ? rec.status : 'AUSENTE';
-                const time = rec ? rec.timestamp : '';
-                const note = rec ? rec.note.replace(/,/g, ' ') : '';
-                const gender = person.gender === 'F' ? 'Femenino' : 'Masculino';
-
-                csvContent += `"${person.id}","${person.name}","${gender}","${person.group || ''}","${status}","${time}","${note}","${selectedDate}"\n`;
-            });
-
-            const encodedUri = encodeURI(csvContent);
-            const link = document.createElement("a");
-            link.setAttribute("href", encodedUri);
-            link.setAttribute("download", `Asistencia_Estudiantes_${selectedDate}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-
-            showToast('CSV descargado con éxito', 'success');
+        function cargarEstudiantesEjemplo() {
+            estudiantes = [...ESTUDIANTES_EJEMPLO];
+            guardarEnLocalStorage();
+            renderizarLista();
+            mostrarToast("Lista de ejemplo cargada");
         }
 
-        // TOAST NOTIFICATIONS
-        function showToast(message, type = 'info') {
-            const container = document.getElementById('toastContainer');
-            const toast = document.createElement('div');
-
-            let bg = 'bg-slate-900 text-white';
-            if (type === 'success') bg = 'bg-emerald-600 text-white';
-            if (type === 'error') bg = 'bg-rose-600 text-white';
-            if (type === 'warning') bg = 'bg-amber-500 text-white';
-
-            toast.className = `${bg} px-3.5 py-2 rounded-xl shadow-lg text-xs font-semibold flex items-center gap-2 transition-all duration-300 transform translate-y-2 opacity-0 pointer-events-auto`;
-            toast.innerHTML = `<span>${message}</span>`;
-
-            container.appendChild(toast);
-
-            setTimeout(() => toast.classList.remove('translate-y-2', 'opacity-0'), 10);
+        function mostrarToast(mensaje) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMsg').innerText = mensaje;
+            toast.classList.remove('translate-y-20', 'opacity-0');
             setTimeout(() => {
-                toast.classList.add('opacity-0', '-translate-y-2');
-                setTimeout(() => toast.remove(), 300);
+                toast.classList.add('translate-y-20', 'opacity-0');
             }, 2500);
         }
     </script>
